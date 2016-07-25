@@ -14,7 +14,6 @@ import datetime
 
 try:
     import argparse
-
     flags = argparse.ArgumentParser(parents=[tools.argparser]).parse_args()
 except ImportError:
     flags = None
@@ -90,13 +89,13 @@ def main():
                 'end': {
                     'dateTime': event['end'].get('dateTime', event['start'].get('date')),
                 },
-                'iCalUID': event['iCalUID'],
+                # 'iCalUID': event['iCalUID'],
                 'reminders': event['reminders']
             }
-            service.events().import_(calendarId='basic.org_5v84mhde7ri8q19af7ls9o73b4@group.calendar.google.com', body=ev).execute()
+            service.events().insert(calendarId='basic.org_5v84mhde7ri8q19af7ls9o73b4@group.calendar.google.com', body=ev).execute()
         count  += 1
 
-    count = 0
+    count = 1
     for e in secondaryCalendarEvents:
         start = e['start'].get('dateTime', e['start'].get('date'))
         print("Part 2:", count, start, e['summary'])
@@ -111,10 +110,10 @@ def main():
                 'end': {
                     'dateTime': e['end'].get('dateTime', e['start'].get('date')),
                 },
-                'iCalUID': e['iCalUID'],
+                # 'iCalUID': e['iCalUID'],
                 'reminders': e['reminders']
             }
-            service.events().import_(calendarId='primary', body=ev).execute()
+            service.events().insert(calendarId='primary', body=ev).execute()
         count  += 1
 
     # page_token = None
