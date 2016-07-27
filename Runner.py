@@ -78,7 +78,7 @@ def main():
     for event in primaryCalendarEvents:
         start = event['start'].get('dateTime', event['start'].get('date'))
         print(count, start, event['summary'])
-        if not checkDate(event['start'].get('dateTime', event['start'].get('date')), secondaryCalendarEvents):
+        if not checkDate(event, secondaryCalendarEvents):
             ev = {
                 'summary': event['summary'],
                 'location': event['location'],
@@ -99,7 +99,7 @@ def main():
     for e in secondaryCalendarEvents:
         start = e['start'].get('dateTime', e['start'].get('date'))
         print("Part 2:", count, start, e['summary'])
-        if not checkDate(e['start'].get('dateTime', e['start'].get('date')), primaryCalendarEvents):
+        if not checkDate(e, primaryCalendarEvents):
             ev = {
                 'summary': e['summary'],
                 'location': e['location'],
@@ -126,9 +126,11 @@ def main():
     #         break
 
 
+
 def checkDate(ical, calendar):
     for i in calendar:
-        if ical is i['start'].get('dateTime', i['start'].get('date')):
+        # print ("Ical: ", ical['iCalUID'], "i: ", i['iCalUID'])
+        if ical['iCalUID'] == i['iCalUID']:
             return True
     return False
 
