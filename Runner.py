@@ -57,7 +57,20 @@ def main():
     credentials = get_credentials()
     http = credentials.authorize(httplib2.Http())
     service = discovery.build('calendar', 'v3', http=http)
-    number_of_events = 1000
+    number_of_events = 200
+
+    secondarCalendarID = ""
+    page_token = None
+    while True:
+        calendar_list = service.calendarList().list(pageToken=page_token).execute()
+        for calendar_list_entry in calendar_list['items']:
+            if calendar_list_entry['summary'] == 'test':
+                secondarCalendarID = calendar_list_entry['id']
+            page_token = calendar_list.get('nextPageToken')
+        if not page_token:
+                break
+
+    print(secondarCalendarID)
 
     now = datetime.datetime.utcnow().isoformat() + 'Z'  # 'Z' indicates UTC time
     print('Getting the upcoming', number_of_events, 'events')
@@ -67,7 +80,7 @@ def main():
         orderBy='startTime').execute()
 
     secondaryEventsResult = service.events().list(
-        calendarId='basic.org_5v84mhde7ri8q19af7ls9o73b4@group.calendar.google.com', timeMin=now, maxResults=number_of_events, singleEvents=True,
+        calendarId=secondarCalendarID, timeMin=now, maxResults=number_of_events, singleEvents=True,
         orderBy='startTime').execute()
 
     primaryCalendarEvents = primaryEventsResult.get('items', [])
@@ -78,61 +91,34 @@ def main():
     for event in primaryCalendarEvents:
         start = event['start'].get('dateTime', event['start'].get('date'))
         print(count, start, event['summary'])
-        if not checkDate(event, secondaryCalendarEvents):
-            ev = {
-                'summary': event['summary'],
-                'location': event['location'],
-                'description': event['description'],
-                'start': {
-                    'dateTime': event['start'].get('dateTime', event['start'].get('date')),
-                },
-                'end': {
-                    'dateTime': event['end'].get('dateTime', event['start'].get('date')),
-                },
-                # 'iCalUID': event['iCalUID'],
-                'reminders': event['reminders']
-            }
-            service.events().insert(calendarId='basic.org_5v84mhde7ri8q19af7ls9o73b4@group.calendar.google.com', body=ev).execute()
+        if not checkICal(event, secondaryCalendarEvents):
+            service.events().insert(calendarId=secondarCalendarID, body=generateEvent(event)).execute()
+            # pass
         count  += 1
 
     count = 1
     for e in secondaryCalendarEvents:
         start = e['start'].get('dateTime', e['start'].get('date'))
         print("Part 2:", count, start, e['summary'])
-        if not checkDate(e, primaryCalendarEvents):
-            ev = {
-                'summary': e['summary'],
-                'location': e['location'],
-                'description': e['description'],
-                'start': {
-                    'dateTime': e['start'].get('dateTime', e['start'].get('date')),
-                },
-                'end': {
-                    'dateTime': e['end'].get('dateTime', e['start'].get('date')),
-                },
-                # 'iCalUID': e['iCalUID'],
-                'reminders': e['reminders']
-            }
-            service.events().insert(calendarId='primary', body=ev).execute()
+        if not checkICal(e, primaryCalendarEvents):
+            service.events().insert(calendarId='primary', body=generateEvent(e)).execute()
+            # pass
         count  += 1
 
-    # page_token = None
-    # while True:
-    #     calendar_list = service.calendarList().list(pageToken=page_token).execute()
-    #     for calendar_list_entry in calendar_list['items']:
-    #         print(calendar_list_entry['summary'], calendar_list_entry['id'])
-    #     page_token = calendar_list.get('nextPageToken')
-    #     if not page_token:
-    #         break
 
 
 
-def checkDate(ical, calendar):
+def checkICal(ical, calendar):
     for i in calendar:
         # print ("Ical: ", ical['iCalUID'], "i: ", i['iCalUID'])
         if ical['iCalUID'] == i['iCalUID']:
             return True
     return False
+
+def generateEvent(ev):
+    event  = ev
+    event['id'] = ''
+    return event
 
 
 
