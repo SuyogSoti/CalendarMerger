@@ -1,4 +1,4 @@
-# cronjob to make it repeat every 800 seconds or 15 minutes
+# cronjob to make it repeat every 123.615 seconds or 2:04 minutes
 
 
 from __future__ import print_function
@@ -92,8 +92,11 @@ def main():
         start = event['start'].get('dateTime', event['start'].get('date'))
         print(count, start, event['summary'])
         if not checkICal(event, secondaryCalendarEvents):
-            service.events().insert(calendarId=secondarCalendarID, body=generateEvent(event)).execute()
-            # pass
+            try:
+                service.events().insert(calendarId=secondarCalendarID, body=generateEvent(event)).execute()
+            except Exception as e:
+                print("\033[91m" + "error:", e)
+                os.system('ntfy -t "Suyog\'s Calendar Program" send "There is a bug in the program! :( Please contact Suyog about this..."')
         count  += 1
 
     count = 1
@@ -111,15 +114,27 @@ def main():
 def checkICal(ical, calendar):
     for i in calendar:
         # print ("Ical: ", ical['iCalUID'], "i: ", i['iCalUID'])
-        if ical['iCalUID'] == i['iCalUID']:
+        if (ical['summary'] == i['summary']
+        and ical['location'] == i['location']
+        and ical['description'] == i['description']
+        and ical['start'].get('dateTime', ical['start'].get('date')) == i['start'].get('dateTime', i['start'].get('date'))
+        and ical['end'].get('dateTime', ical['start'].get('date')) == i['end'].get('dateTime', i['start'].get('date'))):
             return True
     return False
 
-def generateEvent(ev):
-    event  = ev
-    event['id'] = ''
-    return event
-
+def generateEvent(event):
+    return {
+        'summary': event['summary'],
+        'location': event['location'],
+        'description': event['description'],
+        'start': {
+            'dateTime': event['start'].get('dateTime', event['start'].get('date')),
+        },
+        'end': {
+            'dateTime': event['end'].get('dateTime', event['start'].get('date')),
+        },
+        'reminders': event['reminders']
+    }
 
 
 if __name__ == '__main__':
