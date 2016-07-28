@@ -1,6 +1,5 @@
 # cronjob to make it repeat every 123.615 seconds or 2:04 minutes
 
-
 from __future__ import print_function
 import httplib2
 import os
@@ -9,8 +8,10 @@ from apiclient import discovery
 import oauth2client
 from oauth2client import client
 from oauth2client import tools
-
+import strict_rfc3339 as strict
+import time
 import datetime
+import json
 
 try:
     import argparse
@@ -52,7 +53,18 @@ def main():
     # eventText = "lunch with andy tomorrow at 10 am"
     # test = service.events().quickAdd(calendarId='primary', text=eventText, sendNotifications=True).execute()
     # print ("The event added: '", eventText, "'.")
-
+    home_dir = os.path.expanduser('~')
+    myPath = os.path.join(home_dir, '.suyg-calender-merger')
+    if not os.path.exists(myPath):
+        os.makedirs(myPath)
+    if not os.path.exists(os.path.join(myPath, "last-data-primary.txt")):
+        os.system("touch "+os.path.join(myPath, "last-data-primary.txt"))
+        open(os.path.join(myPath, "last-data-primary.txt"), 'w').close()
+    if not os.path.exists(os.path.join(myPath, "last-data-secondary.txt")):
+        os.system("touch "+os.path.join(myPath, "last-data-secondary.txt"))
+        open(os.path.join(myPath, "last-data-secondary.txt"), 'w').close()
+    PrimaryFile = open(os.path.join(myPath, "last-data-primary.txt"), 'r+')
+    SecondaryFile = open(os.path.join(myPath, "last-data-secondary.txt"), 'r+')
 
     credentials = get_credentials()
     http = credentials.authorize(httplib2.Http())
@@ -73,6 +85,7 @@ def main():
     print(secondarCalendarID)
 
     now = datetime.datetime.utcnow().isoformat() + 'Z'  # 'Z' indicates UTC time
+    print(now)
     print('Getting the upcoming', number_of_events, 'events')
 
     primaryEventsResult = service.events().list(
@@ -86,47 +99,102 @@ def main():
     primaryCalendarEvents = primaryEventsResult.get('items', [])
     secondaryCalendarEvents = secondaryEventsResult.get('items', [])
 
+    print("DELETING ALL DELETED EVENTS")
+    listOfOld = []
+    count = 1
+    for line in PrimaryFile:
+        try:
+            oldData = json.loads(line)
+            var = oldData['start']['dateTime']
+            var = strict.rfc3339_to_timestamp(var)
+        except Exception as e:
+            print(e)
+        if checkICal(oldData, primaryCalendarEvents) == None and var > time.time():
+            i = checkICal(oldData, secondaryCalendarEvents)
+            if i == None:
+                pass
+            else:
+                try:
+                    listOfOld.append(i)
+                    print(i['start']['dateTime'], i['summary'])
+                    print("\033[91m" + "something was deleted! in the secondary calendar")
+                    service.events().delete(calendarId=secondarCalendarID, eventId=i['id']).execute()
+                    replace_line(os.path.join(myPath, "last-data-primary.txt"), count, "{}")
+                except Exception as e:
+                    print(e)
+        count = count + 1
 
     count = 1
+    for line in SecondaryFile:
+        try:
+            oldData = json.loads(line)
+            var = oldData['start']['dateTime']
+            var = strict.rfc3339_to_timestamp(var)
+        except Exception as e:
+            print(e)
+        if (var > time.time() and checkICal(oldData, secondaryCalendarEvents) == None):
+            i = checkICal(oldData, primaryCalendarEvents)
+            if i == None:
+                pass
+            else:
+                try:
+                    listOfOld.append(i)
+                    print(i['start']['dateTime'], i['summary'])
+                    print("\033[91m" + "something was deleted! in the primary calendar")
+                    service.events().delete(calendarId="primary", eventId=i['id']).execute()
+                    replace_line(os.path.join(myPath, "last-data-secondary.txt"), count, "{}")
+                except Exception as e:
+                    print(e)
+        count = count + 1
+
+    count = 1
+    print("SYNCING ALL EVENTS")
     for event in primaryCalendarEvents:
-        start = event['start'].get('dateTime', event['start'].get('date'))
+        start = event['start']['dateTime']#.get('dateTime', event['start'].get('date'))
         print(count, start, event['summary'])
-        if not checkICal(event, secondaryCalendarEvents):
+        if checkICal(event, secondaryCalendarEvents) is None and checkICal(event, listOfOld) is None:
             try:
                 service.events().insert(calendarId=secondarCalendarID, body=generateEvent(event)).execute()
             except Exception as e:
-                print("\033[91m" + "error:", e)
+                print("\033[91m" + "error of inserting into Secondary Calendar:", e)
                 os.system('ntfy -t "Suyog\'s Calendar Program" send "There is a bug in the program! :( Please contact Suyog about this..."')
-        count  += 1
+        count += 1
+        PrimaryFile.write(json.dumps(event) + "\n")
+    PrimaryFile.close()
 
     count = 1
     for e in secondaryCalendarEvents:
         start = e['start'].get('dateTime', e['start'].get('date'))
         print("Part 2:", count, start, e['summary'])
-        if not checkICal(e, primaryCalendarEvents):
-            service.events().insert(calendarId='primary', body=generateEvent(e)).execute()
-            # pass
+        if checkICal(e, primaryCalendarEvents) is None and checkICal(e, listOfOld) is None:
+            try:
+                service.events().insert(calendarId='primary', body=generateEvent(e)).execute()
+            except Exception as e:
+                print("\033[91m" + "error of inserting into Primary Calendar:", e)
+                os.system('ntfy -t "Suyog\'s Calendar Program" send "There is a bug in the program! :( Please contact Suyog about this..."')
         count  += 1
-
+        SecondaryFile.write(json.dumps(e) + "\n")
+    SecondaryFile.close()
 
 
 
 def checkICal(ical, calendar):
+    # print(ical)
     for i in calendar:
         # print ("Ical: ", ical['iCalUID'], "i: ", i['iCalUID'])
-        if (ical['summary'] == i['summary']
-        and ical['location'] == i['location']
-        and ical['description'] == i['description']
-        and ical['start'].get('dateTime', ical['start'].get('date')) == i['start'].get('dateTime', i['start'].get('date'))
-        and ical['end'].get('dateTime', ical['start'].get('date')) == i['end'].get('dateTime', i['start'].get('date'))):
-            return True
-    return False
+        try:
+            if (ical['summary'] == i['summary']
+            and ical['start'].get('dateTime', ical['start'].get('date')) == i['start'].get('dateTime', i['start'].get('date'))
+            and ical['end'].get('dateTime', ical['start'].get('date')) == i['end'].get('dateTime', i['start'].get('date'))):
+                return i
+        except Exception as e:
+            raise e
 
 def generateEvent(event):
     return {
         'summary': event['summary'],
-        'location': event['location'],
-        'description': event['description'],
+        'location': "Somewhere",
+        'description': "I am just busy!",
         'start': {
             'dateTime': event['start'].get('dateTime', event['start'].get('date')),
         },
@@ -135,7 +203,13 @@ def generateEvent(event):
         },
         'reminders': event['reminders']
     }
-
+def replace_line(file_name, line_num, text):
+    lines = open(file_name, 'r').readlines()
+    lines[line_num] = text
+    out = open(file_name, 'w')
+    out.writelines(lines)
+    out.close()
 
 if __name__ == '__main__':
+    main()
     main()
