@@ -119,7 +119,7 @@ def main():
                     print(i['start']['dateTime'], i['summary'])
                     print("\033[91m" + "something was deleted! in the secondary calendar")
                     service.events().delete(calendarId=secondarCalendarID, eventId=i['id']).execute()
-                    replace_line(os.path.join(myPath, "last-data-primary.txt"), count, "{}")
+                    replace_line(os.path.join(myPath, "last-data-primary.txt"), count, "{}\n")
                 except Exception as e:
                     print(e)
         count = count + 1
@@ -132,7 +132,7 @@ def main():
             var = strict.rfc3339_to_timestamp(var)
         except Exception as e:
             print(e)
-        if (var > time.time() and checkICal(oldData, secondaryCalendarEvents) == None):
+        if (var > time.time() and checkICal(oldData, secondaryCalendarEvents) == None and checkICal(oldData, listOfOld) is None):
             i = checkICal(oldData, primaryCalendarEvents)
             if i == None:
                 pass
@@ -142,10 +142,11 @@ def main():
                     print(i['start']['dateTime'], i['summary'])
                     print("\033[91m" + "something was deleted! in the primary calendar")
                     service.events().delete(calendarId="primary", eventId=i['id']).execute()
-                    replace_line(os.path.join(myPath, "last-data-secondary.txt"), count, "{}")
+                    replace_line(os.path.join(myPath, "last-data-secondary.txt"), count, "{}\n")
                 except Exception as e:
                     print(e)
         count = count + 1
+
 
     count = 1
     print("SYNCING ALL EVENTS")
@@ -188,7 +189,7 @@ def checkICal(ical, calendar):
             and ical['end'].get('dateTime', ical['start'].get('date')) == i['end'].get('dateTime', i['start'].get('date'))):
                 return i
         except Exception as e:
-            raise e
+            print(e)
 
 def generateEvent(event):
     return {
